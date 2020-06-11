@@ -3,6 +3,10 @@ package goinsta
 import (
 	"encoding/json"
 	"image"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+
 	// Required for getImageDimensionFromReader in jpg and png format
 	_ "image/jpeg"
 	_ "image/png"
@@ -78,4 +82,15 @@ func getImageDimensionFromReader(rdr io.Reader) (int, int, error) {
 		return 0, 0, err
 	}
 	return image.Width, image.Height, nil
+}
+
+type writeFile2Writer struct {
+	path     string
+	filename string
+	perm     os.FileMode
+}
+
+func (wf2w *writeFile2Writer) Write(p []byte) (n int, err error) {
+	err = ioutil.WriteFile(filepath.Join(wf2w.path, wf2w.filename), p, wf2w.perm)
+	return len(p), err
 }

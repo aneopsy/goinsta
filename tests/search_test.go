@@ -1,4 +1,4 @@
-package tests
+package goinsta_tests
 
 import (
 	"testing"

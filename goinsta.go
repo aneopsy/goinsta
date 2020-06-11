@@ -3,13 +3,13 @@ package goinsta
 import (
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"net/http/cookiejar"
 	neturl "net/url"
 	"os"
-	"path/filepath"
 	"strconv"
 	"time"
 )
@@ -171,66 +171,60 @@ func (inst *Instagram) UnsetProxy() {
 	inst.c.Transport = nil
 }
 
-// Save exports config to ~/.goinsta
-func (inst *Instagram) Save() error {
+// Save exports config to path/filename
+// @Deprecated User should do it
+func (inst *Instagram) Save(path string, filename string) error {
 	home := os.Getenv("HOME")
 	if home == "" {
 		home = os.Getenv("home") // for plan9
 	}
-	return inst.Export(filepath.Join(home, ".goinsta"))
-}
-
-// Export exports *Instagram object options
-func (inst *Instagram) Export(path string) error {
-	url, err := neturl.Parse(goInstaAPIUrl)
-	if err != nil {
-		return err
+	writer := writeFile2Writer{
+		path:     path,
+		filename: filename,
+		perm:     0644,
 	}
-
-	config := ConfigFile{
-		ID:        inst.Account.ID,
-		User:      inst.user,
-		DeviceID:  inst.dID,
-		UUID:      inst.uuid,
-		RankToken: inst.rankToken,
-		Token:     inst.token,
-		PhoneID:   inst.pid,
-		Cookies:   inst.c.Jar.Cookies(url),
-	}
-	bytes, err := json.Marshal(config)
-	if err != nil {
-		return err
-	}
-
-	return ioutil.WriteFile(path, bytes, 0644)
-}
-
-// Export exports selected *Instagram object options to an io.Writer
-func Export(inst *Instagram, writer io.Writer) error {
-	url, err := neturl.Parse(goInstaAPIUrl)
-	if err != nil {
-		return err
-	}
-
-	config := ConfigFile{
-		ID:        inst.Account.ID,
-		User:      inst.user,
-		DeviceID:  inst.dID,
-		UUID:      inst.uuid,
-		RankToken: inst.rankToken,
-		Token:     inst.token,
-		PhoneID:   inst.pid,
-		Cookies:   inst.c.Jar.Cookies(url),
-	}
-	bytes, err := json.Marshal(config)
-	if err != nil {
-		return err
-	}
-	_, err = writer.Write(bytes)
+	_, err := inst.Export(&writer)
 	return err
 }
 
-// ImportReader imports instagram configuration from io.Reader
+// Export exports *Instagram object options
+func (inst *Instagram) Export(writer io.Writer) (int, error) {
+	url, err := neturl.Parse(goInstaAPIUrl)
+	if err != nil {
+		return 0, err
+	}
+
+	config := ConfigFile{
+		ID:        inst.Account.ID,
+		User:      inst.user,
+		DeviceID:  inst.dID,
+		UUID:      inst.uuid,
+		RankToken: inst.rankToken,
+		Token:     inst.token,
+		PhoneID:   inst.pid,
+		Cookies:   inst.c.Jar.Cookies(url),
+	}
+	bytes, err := json.Marshal(config)
+	if err != nil {
+		return 0, err
+	}
+
+	return writer.Write(bytes)
+}
+
+// ImportFile imports instagram configuration
+// @Deprecated User should do it
+// This function does not set proxy automatically. Use SetProxy after this call.
+func ImportFile(path string) (*Instagram, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return ImportReader(f)
+}
+
+// Import imports instagram configuration from io.Reader
 //
 // This function does not set proxy automatically. Use SetProxy after this call.
 func ImportReader(r io.Reader) (*Instagram, error) {
@@ -280,18 +274,6 @@ func ImportConfig(config ConfigFile) (*Instagram, error) {
 	inst.Account.Sync()
 
 	return inst, nil
-}
-
-// Import imports instagram configuration
-//
-// This function does not set proxy automatically. Use SetProxy after this call.
-func Import(path string) (*Instagram, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	return ImportReader(f)
 }
 
 func (inst *Instagram) readMsisdnHeader() error {
@@ -529,9 +511,16 @@ func (inst *Instagram) expose() error {
 //
 // See example: examples/media/like.go
 func (inst *Instagram) GetMedia(o interface{}) (*FeedMedia, error) {
-	media := &FeedMedia{
-		inst:   inst,
-		NextID: o,
+	switch v := o.(type) {
+	case int64:
+	case string:
+		media := &FeedMedia{
+			inst:   inst,
+			NextID: o,
+		}
+		return media, media.Sync()
+	default:
+		return nil, fmt.Errorf("GetMedia expect a int64 or a string but receive %v", v)
 	}
-	return media, media.Sync()
+	return nil, nil
 }
